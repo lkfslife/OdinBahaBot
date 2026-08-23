@@ -83,10 +83,18 @@ def run():
             post_id = match.group(1)
 
             if ("情報" in title) and (post_id not in sent_ids):
-                # 採用最終調校版 Discord Markdown 排版
+                # 判斷是韓服前瞻還是台服情報
+                is_kr = any(k in title for k in ["韓版", "韓服", "KR", "韓測"])
+                
+                if is_kr:
+                    server_tag = "[ ⚡ 奧丁神諭 ‧ 韓服前瞻情報 ]"
+                else:
+                    server_tag = "[ ⚡ 奧丁神諭 ‧ 台服官方快訊 ]"
+
+                # 組裝 Discord Markdown 排版
                 content = (
                     f"```ini\n"
-                    f"[ ⚡ 奧丁神諭 ‧ 官方情報快訊 ]\n"
+                    f"{server_tag}\n"
                     f"```\n"
                     f"📜 **文章標題**\n"
                     f"```yaml\n"
@@ -99,7 +107,7 @@ def run():
                 payload = {"content": content}
                 res = requests.post(WEBHOOK_URL, json=payload)
                 if res.status_code in [200, 204]:
-                    print(f"✅ 成功推送: {title}")
+                    print(f"✅ 成功推送 ({'韓服' if is_kr else '台服'}): {title}")
                     new_sent_ids.add(post_id)
                 else:
                     print(f"❌ Webhook 推送失敗: {res.status_code}")
