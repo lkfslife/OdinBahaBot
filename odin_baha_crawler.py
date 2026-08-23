@@ -69,19 +69,7 @@ def run():
             # 篩選情報標籤且尚未推送過
             if ("情報" in title) and (post_id not in sent_ids):
                 payload = {
-                    "embeds": [
-                        {
-                            "title": title,
-                            "url": href,
-                            "color": 15844367,  # 金黃色 (十六進位轉十進位)
-                            "author": {
-                                "name": "巴哈姆特 - 奧丁：神叛 哈啦板"
-                            },
-                            "footer": {
-                                "text": "Odin Baha Notifier"
-                            }
-                        }
-                    ]
+                    "content": f"📢 **【奧丁情報通知】**\n**標題**：{title}\n**傳送門**：{href}"
                 }
                 res = requests.post(WEBHOOK_URL, json=payload)
                 if res.status_code in [200, 204]:
