@@ -1,5 +1,6 @@
 import os
 import re
+from turtle import title
 import requests
 from bs4 import BeautifulSoup
 
@@ -82,20 +83,17 @@ def run():
             post_id = match.group(1)
 
             if ("情報" in title) and (post_id not in sent_ids):
-                # 抓取內文預覽
-                preview_text = fetch_post_preview(href)
-
-                # 使用 Discord Markdown 美化排版
+                # 採用最終調校版 Discord Markdown 排版
                 content = (
                     f"```ini\n"
                     f"[ ⚡ 奧丁神諭 ‧ 官方情報快訊 ]\n"
                     f"```\n"
                     f"📜 **文章標題**\n"
-                    f"**{title}**\n\n"
-                    f"📝 **重點摘要**\n"
-                    f">>> {preview_text}\n\n"
-                    f"🔗 **傳送門**：[點此前往巴哈姆特觀看完整內容]({href})\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━"
+                    f"```yaml\n"
+                    f"{title}\n"
+                    f"```\n"
+                    f"> 🔗 **傳送門**：[點此前往巴哈姆特觀看完整內容]({href})\n"
+                    f"> ━━━━━━━━━━━━━━━━━━━━━━"
                 )
 
                 payload = {"content": content}
