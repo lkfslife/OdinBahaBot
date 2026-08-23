@@ -1,6 +1,5 @@
 import os
 import re
-from turtle import title
 import requests
 from bs4 import BeautifulSoup
 
@@ -23,41 +22,44 @@ HEADERS = {
 RECORD_FILE = "sent_ids.txt"
 
 def load_sent_ids():
+    """讀取歷史推送紀錄"""
     if os.path.exists(RECORD_FILE):
         with open(RECORD_FILE, "r", encoding="utf-8") as f:
             return set(line.strip() for line in f if line.strip())
     return set()
 
 def save_sent_ids(sent_ids):
+    """寫入歷史推送紀錄（最多保留 200 筆）"""
     with open(RECORD_FILE, "w", encoding="utf-8") as f:
         for post_id in list(sent_ids)[-200:]:
             f.write(f"{post_id}\n")
 
-def fetch_post_preview(url):
-    """進入文章內頁抓取前 120 字內文摘要"""
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, "html.parser")
-            # 巴哈文章內容主區塊
-            article_body = soup.select_one(".c-article__content")
-            if article_body:
-                text = article_body.get_text(separator=" ", strip=True)
-                # 清除多餘空白並截取前 120 字
-                text = re.sub(r"\s+", " ", text)
-                if len(text) > 120:
-                    return text[:120] + "..."
-                return text
-    except Exception as e:
-        print(f"[-] 抓取文章內文失敗: {e}")
-    return "點擊下方傳送門查看完整內容。"
+def get_server_banner(title):
+    """精準判定伺服器與公告類型"""
+    is_kr = any(k in title for k in ["韓版", "韓服", "KR", "韓"])
+    is_maint = "例行維護公告" in title
+
+    # 1. 標題同時有維護公告與韓版更新內容 (例如截圖中的：08月13日 例行維護公告、韓版 08月12日 更新內容)
+    if is_maint and is_kr:
+        return "[ ⚡ 奧丁神諭 ‧ 台韓更新情報 ]"
+
+    # 2. 單純台服例行維護
+    if is_maint:
+        return "[ 🛠️ 奧丁神諭 ‧ 例行維護公告 ]"
+
+    # 3. 韓服前瞻情報
+    if is_kr:
+        return "[ 🔮 奧丁神諭 ‧ 韓服前瞻情報 ]"
+
+    # 4. 台服官方快訊
+    return "[ 📢 奧丁神諭 ‧ 台服官方快訊 ]"
 
 def run():
     if not WEBHOOK_URL:
         print("❌ 錯誤：找不到 DISCORD_WEBHOOK_URL")
         return
 
-    print("🔍 開始檢查巴哈姆特哈啦板情報...")
+    print("🔍 開始檢查巴哈姆特哈啦板最新文章...")
     try:
         response = requests.get(BOARD_URL, headers=HEADERS, timeout=15)
         if response.status_code != 200:
@@ -68,7 +70,7 @@ def run():
         articles = soup.select(".b-list__row")
         sent_ids = load_sent_ids()
         new_sent_ids = set(sent_ids)
-        
+
         for art in reversed(articles):
             title_tag = art.select_one(".b-list__main__title")
             if not title_tag:
@@ -82,19 +84,15 @@ def run():
                 continue
             post_id = match.group(1)
 
-            if ("情報" in title) and (post_id not in sent_ids):
-                # 判斷是韓服前瞻還是台服情報
-                is_kr = any(k in title for k in ["韓版", "韓服", "KR", "韓測"])
-                
-                if is_kr:
-                    server_tag = "[ ⚡ 奧丁神諭 ‧ 韓服前瞻情報 ]"
-                else:
-                    server_tag = "[ ⚡ 奧丁神諭 ‧ 台服官方快訊 ]"
+            # 嚴格過濾：僅抓取「【情報】」或「例行維護公告」
+            is_target = ("【情報】" in title) or ("例行維護公告" in title)
 
-                # 組裝 Discord Markdown 排版
+            if is_target and (post_id not in sent_ids):
+                server_banner = get_server_banner(title)
+
                 content = (
                     f"```ini\n"
-                    f"{server_tag}\n"
+                    f"{server_banner}\n"
                     f"```\n"
                     f"📜 **文章標題**\n"
                     f"```yaml\n"
@@ -107,7 +105,7 @@ def run():
                 payload = {"content": content}
                 res = requests.post(WEBHOOK_URL, json=payload)
                 if res.status_code in [200, 204]:
-                    print(f"✅ 成功推送 ({'韓服' if is_kr else '台服'}): {title}")
+                    print(f"✅ 成功推送 {server_banner}: {title}")
                     new_sent_ids.add(post_id)
                 else:
                     print(f"❌ Webhook 推送失敗: {res.status_code}")
