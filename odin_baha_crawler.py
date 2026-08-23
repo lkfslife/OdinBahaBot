@@ -94,7 +94,6 @@ def run():
                     f"```ini\n"
                     f"{server_banner}\n"
                     f"```\n"
-                    f"📜 **文章標題**\n"
                     f"```yaml\n"
                     f"{title}\n"
                     f"```\n"
