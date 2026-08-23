@@ -3,7 +3,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-# 原生支援讀取 local .env（方便本地手動測試，GitHub Actions 會自動讀取 Secret）
+# 原生支援讀取 local .env
 if os.path.exists(".env"):
     with open(".env", "r", encoding="utf-8") as f:
         for line in f:
@@ -22,17 +22,34 @@ HEADERS = {
 RECORD_FILE = "sent_ids.txt"
 
 def load_sent_ids():
-    """讀取歷史推送紀錄"""
     if os.path.exists(RECORD_FILE):
         with open(RECORD_FILE, "r", encoding="utf-8") as f:
             return set(line.strip() for line in f if line.strip())
     return set()
 
 def save_sent_ids(sent_ids):
-    """寫入歷史推送紀錄（最多保留 200 筆，避免檔案過大）"""
     with open(RECORD_FILE, "w", encoding="utf-8") as f:
         for post_id in list(sent_ids)[-200:]:
             f.write(f"{post_id}\n")
+
+def fetch_post_preview(url):
+    """進入文章內頁抓取前 120 字內文摘要"""
+    try:
+        res = requests.get(url, headers=HEADERS, timeout=10)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
+            # 巴哈文章內容主區塊
+            article_body = soup.select_one(".c-article__content")
+            if article_body:
+                text = article_body.get_text(separator=" ", strip=True)
+                # 清除多餘空白並截取前 120 字
+                text = re.sub(r"\s+", " ", text)
+                if len(text) > 120:
+                    return text[:120] + "..."
+                return text
+    except Exception as e:
+        print(f"[-] 抓取文章內文失敗: {e}")
+    return "點擊下方傳送門查看完整內容。"
 
 def run():
     if not WEBHOOK_URL:
@@ -51,7 +68,6 @@ def run():
         sent_ids = load_sent_ids()
         new_sent_ids = set(sent_ids)
         
-        # 反向迭代：由較舊的文章開始推送到最新文章，符合聊天室時序
         for art in reversed(articles):
             title_tag = art.select_one(".b-list__main__title")
             if not title_tag:
@@ -60,17 +76,29 @@ def run():
             title = title_tag.text.strip()
             href = "https://forum.gamer.com.tw/" + title_tag.get("href")
 
-            # 從網址解析出唯一的文章編號 snA (例如 snA=6188)
             match = re.search(r"snA=(\d+)", href)
             if not match:
                 continue
             post_id = match.group(1)
 
-            # 篩選情報標籤且尚未推送過
             if ("情報" in title) and (post_id not in sent_ids):
-                payload = {
-                    "content": f"📢 **【奧丁情報通知】**\n**標題**：{title}\n**傳送門**：{href}"
-                }
+                # 抓取內文預覽
+                preview_text = fetch_post_preview(href)
+
+                # 使用 Discord Markdown 美化排版
+                content = (
+                    f"```ini\n"
+                    f"[ ⚡ 奧丁神諭 ‧ 官方情報快訊 ]\n"
+                    f"```\n"
+                    f"📜 **文章標題**\n"
+                    f"**{title}**\n\n"
+                    f"📝 **重點摘要**\n"
+                    f">>> {preview_text}\n\n"
+                    f"🔗 **傳送門**：[點此前往巴哈姆特觀看完整內容]({href})\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━"
+                )
+
+                payload = {"content": content}
                 res = requests.post(WEBHOOK_URL, json=payload)
                 if res.status_code in [200, 204]:
                     print(f"✅ 成功推送: {title}")
@@ -78,7 +106,6 @@ def run():
                 else:
                     print(f"❌ Webhook 推送失敗: {res.status_code}")
 
-        # 儲存更新後的 ID 紀錄
         save_sent_ids(new_sent_ids)
         print("✅ 檢查完成。")
 
