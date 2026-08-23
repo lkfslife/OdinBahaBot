@@ -1,0 +1,36 @@
+name: Odin Baha Monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # 每 15 分鐘自動檢查一次
+  workflow_dispatch:      # 支援在 GitHub 網頁手動點擊觸發
+
+jobs:
+  check-and-notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write     # 賦予寫入權限以更新已推送清單
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Crawler
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python odin_baha_crawler.py
+
+      - name: Commit and push sent records
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add sent_ids.txt || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update sent posts record [skip ci]" && git push)
